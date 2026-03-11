@@ -2,6 +2,7 @@ streamlit
 streamlit-mic-recorder
 google-genai
 google-cloud-aiplatform
+google-api-core
 gTTS
 SpeechRecognition
 pandas
