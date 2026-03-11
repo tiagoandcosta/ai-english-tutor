@@ -63,7 +63,7 @@ def text_to_speech(text: str, lang: str = "en"):
         return
 
     try:
-        tts = gTTS(text=text, lang=lang, tld='com')
+        tts = gTTS(text=text, lang=lang, tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         fp.seek(0)  # IMPORTANTE: reposiciona o ponteiro antes de tocar
