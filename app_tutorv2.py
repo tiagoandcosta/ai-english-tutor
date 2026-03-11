@@ -1,33 +1,30 @@
 import streamlit as st
 import pandas as pd
-from streamlit_mic_recorder import mic_recorder
-import speech_recognition as sr
-from gtts import gTTS
 import io
 import os
 
-# --- TENTATIVA DE IMPORTAÇÃO ROBUSTA (Resolve o erro ModuleNotFoundError) ---
+# --- IMPORTAÇÃO ROBUSTA ---
 try:
+    from streamlit_mic_recorder import mic_recorder
+    import speech_recognition as sr
+    from gtts import gTTS
     from google import genai
-except ImportError:
-    try:
-        import google.genai as genai
-    except ImportError:
-        st.error("As bibliotecas do Google ainda estão sendo instaladas no servidor. Aguarde 1 minuto e atualize a página.")
-        st.stop()
-
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="AI English Executive Tutor", layout="wide", page_icon="🎓")
-
-# --- CONEXÃO COM GEMINI (VIA SECRETS) ---
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-    client = genai.Client(api_key=api_key)
-else:
-    st.error("Erro: Configure 'GEMINI_API_KEY' nos Secrets do painel do Streamlit Cloud.")
+except ImportError as e:
+    st.error(f"Aguarde um momento... O servidor está instalando os componentes: {e}")
+    st.info("Dica: Se este erro persistir por mais de 2 minutos, clique em 'Reboot App' no painel do Streamlit.")
     st.stop()
 
-# --- FUNÇÕES DE ÁUDIO ---
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="AI Executive Tutor", layout="wide", page_icon="🎓")
+
+# Conexão com Gemini via Secrets
+if "GEMINI_API_KEY" in st.secrets:
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("Erro: Configure 'GEMINI_API_KEY' nos Secrets do Streamlit Cloud.")
+    st.stop()
+
+# --- FUNÇÕES CORE ---
 def process_audio(audio_bytes):
     """Converte áudio do navegador em texto"""
     recognizer = sr.Recognizer()
@@ -39,19 +36,19 @@ def process_audio(audio_bytes):
         except:
             return None
 
-def speak_response(text):
-    """Gera voz e exibe o player com autoplay"""
+def text_to_speech(text):
+    """Gera áudio e exibe o player com autoplay"""
     try:
         tts = gTTS(text=text, lang='en', tld='com')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         st.audio(fp, format='audio/mp3', autoplay=True)
     except Exception as e:
-        st.warning("Ocorreu um erro ao gerar a voz, mas você pode ler a resposta abaixo.")
+        st.warning("Não foi possível gerar a voz no momento.")
 
 # --- INTERFACE ---
 st.title("🎓 AI English Executive Tutor")
-st.caption("Focado em Desenvolvimento de Mercado e Reuniões com o Time da China.")
+st.caption("Focado em Desenvolvimento de Mercado e Negociações com a China.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -64,10 +61,10 @@ for msg in st.session_state.messages:
 st.divider()
 
 # GRAVADOR WEB
-st.write("### 🎙️ Fale com o Tutor")
+st.write("### 🎙️ Pratique sua fala:")
 audio_input = mic_recorder(
-    start_prompt="Clique para falar",
-    stop_prompt="Parar e Analisar",
+    start_prompt="🎤 Começar a Falar",
+    stop_prompt="🛑 Parar e Enviar",
     key='recorder'
 )
 
@@ -77,17 +74,20 @@ if audio_input:
     if user_text:
         st.session_state.messages.append({"role": "user", "content": user_text})
         
-        # Prompt Estruturado para o Gemini
+        # Prompt Estruturado para o Contexto do Usuário
         prompt = f"""
-        Você é um tutor de inglês para executivos. 
-        Analise a frase: '{user_text}'.
-        1. Corrija erros gramaticais.
-        2. Sugira uma versão mais profissional (Business English).
-        3. Responda à frase de forma natural para manter a conversa.
-        Contexto: O aluno trabalha com desenvolvimento de mercado e lida com times na China.
+        Você é um tutor de inglês especializado em Business English e Market Development.
+        O aluno disse: '{user_text}'.
+        
+        Sua tarefa:
+        1. Corrija gramática e pronúncia (se aplicável ao texto).
+        2. Sugira uma forma mais executiva/profissional de dizer o mesmo.
+        3. Responda à pergunta ou comentário de forma natural em inglês para manter o diálogo.
+        
+        Contexto: O aluno interage com times na China e busca crescimento de mercado.
         """
         
-        with st.spinner("O Tutor está analisando sua fala..."):
+        with st.spinner("Analisando sua fala..."):
             response = client.models.generate_content(
                 model="gemini-3.1-flash-lite-preview", 
                 contents=prompt
@@ -95,7 +95,15 @@ if audio_input:
             tutor_reply = response.text
         
         st.session_state.messages.append({"role": "assistant", "content": tutor_reply})
-        st.rerun() # Atualiza para exibir a conversa
-        speak_response(tutor_reply)
+        st.rerun()
+        text_to_speech(tutor_reply)
     else:
-        st.warning("Não consegui entender o áudio. Tente falar novamente mais perto do microfone.")
+        st.warning("Não consegui processar seu áudio. Tente falar mais perto do microfone ou verifique as permissões do navegador.")
+
+# Dashboard Lateral Simples
+with st.sidebar:
+    st.header("📊 Sessão Atual")
+    st.write(f"Interações: {len(st.session_state.messages) // 2}")
+    if st.button("Limpar Conversa"):
+        st.session_state.messages = []
+        st.rerun()
