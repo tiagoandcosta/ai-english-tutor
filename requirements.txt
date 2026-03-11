@@ -1,6 +1,6 @@
 streamlit
+streamlit-mic-recorder
 pandas
 google-genai
 gTTS
-speechrecognition
-numpy
+SpeechRecognition
