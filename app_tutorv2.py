@@ -1,42 +1,41 @@
 import streamlit as st
-import pandas as pd  # (mantido se você quiser usar depois)
+import pandas as pd
 import io
 import os
 import tempfile
 
-# --- IMPORTAÇÃO ROBUSTA ---
+# --- ROBUST IMPORTS ---
 try:
     from streamlit_mic_recorder import mic_recorder
     import speech_recognition as sr
     from gtts import gTTS
     from google import genai
 except ImportError as e:
-    st.error(f"Aguarde um momento... O servidor está instalando os componentes: {e}")
-    st.info("Dica: Se este erro persistir por mais de 2 minutos, clique em 'Reboot App' no painel do Streamlit.")
+    st.error(f"Please wait a moment... The server is installing components: {e}")
+    st.info("Tip: If this error persists for more than 2 minutes, click 'Reboot App' in the Streamlit Cloud panel.")
     st.stop()
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI Executive Tutor", layout="wide", page_icon="🎓")
 
-# --- CONEXÃO COM GEMINI VIA SECRETS ---
+# --- GEMINI CONNECTION VIA SECRETS ---
 if "GEMINI_API_KEY" in st.secrets:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("Erro: Configure 'GEMINI_API_KEY' nos Secrets do Streamlit Cloud.")
+    st.error("Error: Please configure 'GEMINI_API_KEY' in Streamlit Secrets.")
     st.stop()
 
-# --- FUNÇÕES CORE ---
+# --- CORE FUNCTIONS ---
 def process_audio_from_wav_bytes(wav_bytes: bytes, language: str = "en-US"):
     """
-    Converte bytes WAV (PCM) em texto usando SpeechRecognition.
-    Salva em um arquivo temporário .wav para compatibilidade máxima.
+    Converts WAV bytes to text using SpeechRecognition.
+    Saves to a temporary file for maximum compatibility.
     """
     if not wav_bytes or len(wav_bytes) == 0:
         return None
 
     recognizer = sr.Recognizer()
 
-    # Cria arquivo temporário WAV para o AudioFile (mais robusto do que BytesIO em alguns ambientes)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(wav_bytes)
         tmp_path = tmp.name
@@ -47,8 +46,7 @@ def process_audio_from_wav_bytes(wav_bytes: bytes, language: str = "en-US"):
         return recognizer.recognize_google(audio_data, language=language)
     except sr.UnknownValueError:
         return None
-    except Exception as e:
-        # Log opcional: st.debug/print
+    except Exception:
         return None
     finally:
         try:
@@ -56,35 +54,36 @@ def process_audio_from_wav_bytes(wav_bytes: bytes, language: str = "en-US"):
         except Exception:
             pass
 
-
 def text_to_speech(text: str, lang: str = "en"):
-    """Gera áudio com gTTS e exibe o player (com autoplay se o navegador permitir)."""
+    """Generates audio with gTTS and displays the player."""
     if not text:
         return
 
     try:
+        # Using 'co.uk' for a British accent which tends to sound slightly more natural
         tts = gTTS(text=text, lang=lang, tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
-        fp.seek(0)  # IMPORTANTE: reposiciona o ponteiro antes de tocar
+        fp.seek(0)
         st.audio(fp, format='audio/mp3', autoplay=True)
-        st.caption("🔈 Se o áudio não tocar automaticamente, clique no player (os navegadores bloqueiam autoplay até alguma interação).")
+        st.caption("🔈 If audio doesn't play automatically, please click the play button (browsers often block autoplay).")
     except Exception:
-        st.warning("Não foi possível gerar a voz no momento.")
-
+        st.warning("Could not generate voice response at this time.")
 
 def run_tutor(user_text: str):
-    """Chama o Gemini com o prompt estruturado e retorna a resposta."""
+    """Calls Gemini with a structured prompt and returns the response."""
+    # The prompt is now instructing the AI to communicate exclusively in English
     prompt = f"""
-Você é um tutor de inglês especializado em Business English e Market Development.
-O aluno disse: '{user_text}'.
+You are a highly professional English Tutor specialized in Business English and Market Development.
+The student said: '{user_text}'.
 
-Sua tarefa:
-1. Corrija gramática e pronúncia (se aplicável ao texto).
-2. Sugira uma forma mais executiva/profissional de dizer o mesmo.
-3. Responda à pergunta ou comentário de forma natural em inglês para manter o diálogo.
+Your Task:
+1. Review the input for grammar and vocabulary mistakes.
+2. Suggest a more 'Executive/Business Professional' way to phrase it.
+3. Reply to the content naturally in English to keep the conversation flowing.
 
-Contexto: O aluno interage com times na China e busca crescimento de mercado.
+Context: The student is a Market Development Analyst interacting with teams in China. 
+Instruction: Provide the feedback and the reply clearly in English.
 """
     try:
         response = client.models.generate_content(
@@ -92,101 +91,89 @@ Contexto: O aluno interage com times na China e busca crescimento de mercado.
             contents=prompt
         )
         return getattr(response, "text", "").strip()
-    except Exception as e:
-        st.error("Não consegui obter resposta do modelo agora. Tente novamente em instantes.")
+    except Exception:
+        st.error("I couldn't reach the AI model. Please try again in a moment.")
         return None
 
-
-# --- ESTADO INICIAL ---
+# --- INITIAL STATE ---
 st.title("🎓 AI English Executive Tutor")
-st.caption("Focado em Desenvolvimento de Mercado e Negociações com a China.")
+st.caption("Focus: Market Development & Negotiations with China Team.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Exibir histórico
+# Display chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 st.divider()
 
-# --- PAINEL DE CAPTURA DE ÁUDIO ---
-st.write("### 🎙️ Pratique sua fala")
+# --- AUDIO CAPTURE PANEL ---
+st.write("### 🎙️ Practice your speech")
 
-# Força o retorno em WAV (evita o erro do SpeechRecognition com WEBM/OPUS)
 audio_input = mic_recorder(
-    start_prompt="🎤 Começar a Falar",
-    stop_prompt="🛑 Parar e Enviar",
-    just_once=True,                # evita reprocessar o mesmo áudio em cada rerun
+    start_prompt="🎤 Start Speaking",
+    stop_prompt="🛑 Stop & Send",
+    just_once=True,
     use_container_width=True,
-    format="wav",                  # <<< ESSENCIAL: retorna WAV PCM
+    format="wav",
     key="recorder"
 )
 
-# Fallback: upload de arquivo WAV/AIFF/FLAC
+# File uploader fallback
 uploaded = st.file_uploader(
-    "Ou envie um arquivo de áudio (WAV/AIFF/FLAC)",
+    "Or upload an audio file (WAV/AIFF/FLAC)",
     type=["wav", "aiff", "aif", "flac"]
 )
 
-# --- CAPTURA DE TEXTO MANUAL (opcional) ---
-manual_text = st.chat_input("Ou digite sua mensagem em inglês (ou português):")
+# --- MANUAL TEXT INPUT ---
+manual_text = st.chat_input("Or type your message here:")
 
-def handle_user_text(user_text: str, tts_lang: str = "en"):
+def handle_user_text(user_text: str):
     if not user_text:
         return
     st.session_state.messages.append({"role": "user", "content": user_text})
 
-    with st.spinner("Analisando sua fala..."):
+    with st.spinner("Analyzing your speech..."):
         tutor_reply = run_tutor(user_text)
 
     if tutor_reply:
         st.session_state.messages.append({"role": "assistant", "content": tutor_reply})
-        # Render imediatamente (sem st.rerun, para permitir tocar TTS abaixo)
         with st.chat_message("assistant"):
             st.markdown(tutor_reply)
-            text_to_speech(tutor_reply, lang=tts_lang)
+            text_to_speech(tutor_reply)
 
-
-# --- FLUXO POR ÁUDIO ---
+# --- WORKFLOWS ---
 if audio_input and isinstance(audio_input, dict):
     fmt = audio_input.get("format", "wav")
     wav_bytes = audio_input.get("bytes", b"")
 
     if fmt != "wav":
-        st.warning("O gravador retornou um formato diferente de WAV. Regrave ou envie um arquivo WAV/AIFF/FLAC.")
+        st.warning("Recorder returned non-WAV format. Please record again or upload a WAV file.")
     else:
-        # Reconhece em inglês por padrão; se quiser PT-BR mude para "pt-BR"
         user_text = process_audio_from_wav_bytes(wav_bytes, language="en-US")
-
         if user_text:
-            handle_user_text(user_text, tts_lang="en")
+            handle_user_text(user_text)
         else:
-            st.warning("Não consegui processar seu áudio. Tente falar mais perto do microfone ou verifique as permissões do navegador.")
+            st.warning("I couldn't process your audio. Please speak closer to the mic or check browser permissions.")
 
-# --- FLUXO POR UPLOAD ---
 if uploaded is not None:
     file_bytes = uploaded.read()
-    # Tenta reconhecer como inglês (ajuste se quiser)
     user_text = process_audio_from_wav_bytes(file_bytes, language="en-US")
     if user_text:
-        handle_user_text(user_text, tts_lang="en")
+        handle_user_text(user_text)
     else:
-        st.warning("Não consegui reconhecer fala neste arquivo. Verifique se é PCM WAV/AIFF/FLAC com voz audível.")
+        st.warning("Could not recognize speech in this file. Ensure it is a clear WAV/AIFF/FLAC file.")
 
-# --- FLUXO POR TEXTO MANUAL ---
 if manual_text:
-    # Se estiver em PT, você pode traduzir antes, mas aqui mantemos simples:
-    handle_user_text(manual_text, tts_lang="en")
-
+    handle_user_text(manual_text)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("📊 Sessão Atual")
-    # cada par (user, assistant) conta 1
-    pares = sum(1 for m in st.session_state.messages if m["role"] == "assistant")
-    st.write(f"Interações: {pares}")
-    if st.button("Limpar Conversa"):
+    st.header("📊 Current Session")
+    interactions = sum(1 for m in st.session_state.messages if m["role"] == "assistant")
+    st.write(f"Completed interactions: {interactions}")
+    if st.button("Clear Conversation"):
         st.session_state.messages = []
         st.rerun()
